@@ -1,0 +1,30 @@
+seq,scientific_name,common_name,area,stock,sex,a,b,linf,k,t0,l50
+1,Lophius budegassa,Blackbellied angler,Celtic Seas,ang3,F,0.0259,2.858,110.1,0.08,0.39,54.8
+2,Raja clavata,Thornback ray,Celtic Seas,rjc2,F,0.0024,3.2653,139.5,0.09,-1.84,71.8
+3,Sebastes norvegicus,Golden redfish,Northern,smn,C,0.0178,2.972,50.2,0.11,0.08,40.3
+4,Anarhichas lupus,Atlantic wolffish,North Sea,wlf,F,0.0046,3.185,115.1,0.11,-0.39,21.5
+5,Lepidorhombus whiffiagonis,Megrim,North Sea,meg,C,0.0022,3.3433,54,0.12,NA,23
+6,Molva molva,Ling,Widely,lin,C,0.0036,3.108,119,0.14,NA,74
+7,Raja clavata,Thornback ray,North Sea,rjc,F,0.0045,3.0686,118,0.14,-0.88,77.1
+8,Scyliorhinus canicula,Lesser spotted dogfish,Celtic Seas,syc,F,0.0019,3.1541,75.14,0.15,-0.96,57
+9,Mustelus asterias,Starry smooth-hound,Widely,sdv,F,0.001,3.27,123.5,0.15,NA,81.9
+10,Lophius piscatorius,Angler,Celtic Seas,ang,C,0.0198,2.895,105.555,0.18,-0.38,73
+11,Lophius piscatorius,Angler,North Sea,ang2,C,0.0297,2.841,106,0.18,NA,61
+12,Pollachius pollachius,Pollack,North Sea,pol,C,0.0076,3.069,85.6,0.19,NA,47.1
+13,Melanogrammus aeglefinus,Haddock,Celtic Seas,had,C,0.0113,2.96,79.9,0.2,-0.36,NA
+14,Nephrops,Norway lobster,Biscay-Iberia,nep,M,0.00028,3.229,70,0.2,NA,28.4
+15,Mullus surmuletus,Striped red mullet,Celtic Seas,mut,F,0.0057,3.243,47.5,0.21,NA,16.9
+16,Spondyliosoma cantharus,Black seabream,Celtic Seas,sbb,F,0.0148,3.004,41.25,0.22,-1.16,22
+17,Pleuronectes platessa,European plaice,Celtic Seas,ple,F,0.011,2.958,48,0.23,NA,22.9
+18,Scyliorhinus canicula,Lesser spotted dogfish,Biscay-Iberia,syc2,F,0.0022,3.119,66.2,0.23,-0.71,59.1
+19,Argentina silus,Greater argentine,Widely,arg,C,0.005,3.075,44,0.23,NA,38
+20,Scopthalmus maximus,Turbot,North Sea,tur,F,0.0149,3.079,66.7,0.32,0.29,34.2
+21,Chelidonichtys lucerna,Tub gurnard,Celtic Seas,gut,F,0.0043,3.21,66.8,0.32,-0.46,40.1
+22,Merlangius merlangus,Whiting,Celtic Seas,whg,F,0.0103,2.395,38,0.38,-1.01,28
+23,Scophthalmus rhombus,Brill,North Sea,bll,F,0.014,3.01,58,0.38,-0.27,31.3
+24,Microstomus kitt,Lemon sole,North Sea,lem,C,0.0123,2.971,37,0.42,NA,27
+25,Engraulis encrasicolus,Anchovy,Biscay-Iberia,ane,C,0.005,3.107,23,0.44,NA,16.8
+26,Zeus faber,John Dory,Celtic Seas,jnd,F,0.0399,2.754,50.8,0.47,-1.47,34.5
+27,Sardina pilchardus,European pilchard,Celtic Seas,sar,C,0.0053,3.162,22,0.6,NA,14.3
+28,Clupea harengus,Herring,Celtic Seas,her,F,0.0048,3.198,33,0.606,NA,23
+29,Ammodytes spp.,Sandeels,North Sea,san,C,0.0049,2.783,24,1,NA,12
