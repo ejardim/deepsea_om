@@ -131,7 +131,7 @@ refpts(brp)["fmax", ] <- NA
 plot(brp) + theme_bw()
 
 # get stock
-stk <- as(brp, "FLStock")[,1:20]
+stk <- as(brp, "FLStock")
 plot(stk) + theme_bw()
 
 # get stock-recruitment model object
@@ -143,7 +143,7 @@ params(sr)
 # constant f at Fmsy
 fmsy <- c(refpts(brp)["msy", "harvest"])
 # apply fishing history to stock
-ctrl <- fwdControl(year = 10:20, quant = "f", value = fmsy)
+ctrl <- fwdControl(year = 25:101, quant = "f", value = fmsy)
 stk <- fwd(stk, control = ctrl, sr = sr)
 plot(stk) +
   labs(x = "Year") + 
@@ -153,63 +153,63 @@ plot(stk) +
 # deepsea like
 #--------------------------------------------------------------------
 
-stk <- fwdWindow(stk, end=25)
+# stk <- fwdWindow(stk)
+# stk <- window(stk, 25)
 
-ages_tmp <- range(stk)["min"]:range(stk)["max"]
-ages_tmp <- FLQuant(ages_tmp, dimnames = list(age = ages_tmp))
-lambda_out <- FLife:::dnormalFn(age = ages_tmp, params = FLPar(sel1 = ceiling(a50*2), sel2 = 5, sel3 = 200))*0.5
-xyplot(data~age, data=lambda_out, type="b")
+stka <- stkb <- stkc <- stk
+sra.gm <- srb.gm <- src.gm <- as.FLSR(stka, model="geomean")
+harvest(stka) <- harvest(stkb) <- harvest(stk)*0.5
+harvest(stkc)[] <- 0
 
-#--------------------------------------------------------------------
-# now year
-#--------------------------------------------------------------------
-ny <- 19
-# migration in january the first
-flq_out <- stock.n(stk)[,ny]*(1-lambda_out)
-flq_in <- stock.n(stk)[,ny]*lambda_out
-xyplot(log(data)~age, groups=qname, data=FLQuants(a=flq_in, b=flq_out), type="b")
+yinit <- 50
 
-# stock in
-stk_in <- stk
-stock.n(stk_in)[,ny] <- flq_in
-cth <- mean(window(catch(stk_in), start=15, end=ny))
-ctrl <- fwdControl(year = ny, quant = "catch", value = cth)
-stk_in <- fwd(stk_in, control = ctrl, sr = sr)
+# movement
+flq0 <- stock.n(stk)
+flq0[] <- range(stk)["min"]:range(stk)["max"]
+# from a to b
+bab <- flq0
+bab[] <- 0.2
+# from b to a
+bba <- flq0
+bba[] <- 0.1
+# from a to c
+bac <- 0.2
+bac <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1))*bac
+# from b to c
+bbc <- 0.2
+bbc <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1))*bbc
 
-# stock out
-stk_out <- stk
-stock.n(stk_out)[,ny] <- flq_out
-ctrl <- fwdControl(year = ny, quant = "f", value = 0)
-stk_out <- fwd(stk_out, control = ctrl, sr = sr)
+mov <- FLQuants(bab = bab, bba = bba, bac = bac, bbc = bbc)
 
-# all
-stk <- stk_in + stk_out
-harvest(stk)[,ny] <- harvest(stk_in)[,ny]
-rec(stk)[,ny] <- predict(sr, ssb=ssb(stk)[,ny])
+for(i in 1:50){
+  rfut <- predict(sr, ssb=ssb(stk)[,ac(yinit + i - 1)])
 
-#--------------------------------------------------------------------
-# year = 20
-#--------------------------------------------------------------------
-ny <- 20
-# migration
-flq_out <- stock.n(stk)[,ny]*(1-lambda_out)
-flq_in <- stock.n(stk)[,ny]*lambda_out
-xyplot(log(data)~age, groups=qname, data=FLQuants(a=flq_in, b=flq_out), type="b")
+  # from a to b
+  stknab <- stock.n(stka)[,ac(yinit + i)]*mov[["bab"]][,ac(yinit + i)]
+  # from b to a
+  stknba <- stock.n(stkb)[,ac(yinit + i)]*mov[["bba"]][,ac(yinit + i)]
+  # from a to c
+  stknac <- stock.n(stka)[,ac(yinit + i)]*mov[["bac"]][,ac(yinit + i)]
+  # from b to c
+  stknbc <- stock.n(stkb)[,ac(yinit + i)]*mov[["bbc"]][,ac(yinit + i)]
 
-# stock in
-stk_in <- stk
-stock.n(stk_in)[,ny+1] <- flq_in
-cth <- mean(window(catch(stk_in), start=15, end=ny))
-ctrl <- fwdControl(year = 20, quant = "catch", value = cth)
-stk_in <- fwd(stk_in, control = ctrl, sr = sr)
+  stock.n(stka)[,ac(yinit + i)] <- stock.n(stka)[,ac(yinit + i)] - stknab - stknac + stknba
+  stock.n(stkb)[,ac(yinit + i)] <- stock.n(stkb)[,ac(yinit + i)] - stknba - stknbc + stknab
+  stock.n(stkc)[,ac(yinit + i)] <- stock.n(stkc)[,ac(yinit + i)] + stknac + stknbc
 
-# stock out
-stk_out <- stk
-stock.n(stk_out)[,ny+1] <- flq_out
-ctrl <- fwdControl(year = 20, quant = "f", value = 0)
-stk_out <- fwd(stk_out, control = ctrl, sr = sr)
+  # recruitment doesn't move
+  params(sra.gm)[] <- rfut*0.5
+  params(srb.gm)[] <- rfut*0.4
+  params(src.gm)[] <- rfut*0.1
 
-# all
-stk <- stk_in + stk_out
-harvest(stk) <- harvest(stk_in)
-rec(stk)[,ny] <- predict(sr, ssb=ssb(stk)[,ny])
+  ctrl <- fwdControl(year = c(yinit + i,yinit + i + 1), quant = "f", value = 0.05)
+  stka <- fwd(stka, control = ctrl, sr = sra.gm)
+  stkb <- fwd(stkb, control = ctrl, sr = srb.gm)
+  stkc <- fwd(stkc, control = ctrl, sr = src.gm)
+
+  stk <- stka + stkb + stkc
+
+}
+
+plot(window(FLStocks(a=stka, b=stkb, c=stkc), 51))
+plot(window(stk, 51))
