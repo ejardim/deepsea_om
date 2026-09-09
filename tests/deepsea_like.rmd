@@ -1,5 +1,5 @@
 ---
-title: "Deep-sea like OM based on Lophius (WKLIFE)"
+title: "Deep-sea like OM: Data & Multi-area Projections (Lophius, WKLIFE)"
 author: "Ernesto Jardim"
 date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output:
@@ -23,10 +23,22 @@ knitr::opts_chunk$set(
 # Introduction
 
 This report builds a deep-sea-like operating model (OM) based on the
-life-history parameters of *Lophius* (monkfish), as used in WKLIFE. The OM
-represents three areas: two submarine mounts subject to fishing (`a` and
-`b`) and one unfished refuge area (`c`), all sharing a common
-stock-recruitment relationship.
+life-history parameters of *Lophius* (monkfish), as used in WKLIFE. It
+combines two stages that previously lived in separate scripts, run here
+in a single knit:
+
+1. **Data build**: derive growth, weight, natural mortality, maturity,
+   selectivity, and a stock-recruitment relationship from life-history
+   parameters, then build an `FLBRP`/`FLStock` (`stk0`) and apply a
+   historical fishing trajectory at Fmsy.
+2. **Operating model**: split `stk0` into three areas — two submarine
+   mounts subject to fishing (`a` and `b`) and one refuge area not
+   subject to fishing (`c`) — sharing a common stock-recruitment
+   relationship, and project forward under three movement scenarios.
+
+Because everything runs in one document, the objects produced in
+Part 1 (`stk0`, `sr`, `a50`, ...) are simply reused in Part 2 — no
+intermediate `.RData` file is written or loaded.
 
 ```{r install-packages, eval=FALSE}
 install.packages(c("tidyr", "dplyr", "ggplot2"))
@@ -43,7 +55,7 @@ library(tidyr)
 library(dplyr)
 ```
 
-# Generate a stock from life-history parameters (FLife)
+# Part 1: Generate a stock from life-history parameters (FLife)
 
 ## Life-history parameters
 
@@ -112,14 +124,14 @@ df_length %>%
 ```{r natural-mortality}
 df_length$M <- rep(1.5 * lh["k"], nrow(df_length))
 
-df_length %>%
-  ggplot(aes(x = age, y = M)) +
-  geom_line() +
-  geom_point(data = . %>% filter(age %in% agevec)) +
-  geom_vline(xintercept = tmax, colour = "red") +
-  labs(x = "Age (years)", y = "Natural mortality") +
-  theme_bw() +
-  coord_cartesian(ylim = c(0, 3))
+#df_length %>%
+#  ggplot(aes(x = age, y = M)) +
+#  geom_line() +
+#  geom_point(data = . %>% filter(age %in% agevec)) +
+#  geom_vline(xintercept = tmax, colour = "red") +
+#  labs(x = "Age (years)", y = "Natural mortality") +
+#  theme_bw() +
+#  coord_cartesian(ylim = c(0, 3))
 ```
 
 ## Maturity
@@ -204,8 +216,8 @@ plot(brp) + theme_bw()
 
 ```{r flstock}
 # get stock
-stk <- as(brp, "FLStock")
-plot(stk) + theme_bw()
+stk0 <- as(brp, "FLStock")
+plot(stk0) + theme_bw()
 
 # get stock-recruitment model object
 sr <- FLSR(params = params(brp), model = model(brp))
@@ -221,149 +233,284 @@ fmsy <- c(refpts(brp)["msy", "harvest"])
 
 # apply fishing history to stock
 ctrl <- fwdControl(year = 25:101, quant = "f", value = fmsy)
-stk <- fwd(stk, control = ctrl, sr = sr)
-plot(stk) + labs(x = "Year") + theme_bw()
+stk0 <- fwd(stk0, control = ctrl, sr = sr)
+plot(stk0) + labs(x = "Year") + theme_bw()
 ```
 
-# Deep-sea-like operating model
+# Part 2: Deep-sea-like operating model
 
-The OM represents three areas: two submarine mounts subject to fishing
-(`a` and `b`) and one refuge area not subject to fishing (`c`), sharing a
-common stock-recruitment relationship.
+The OM has three areas: two submarine mounts subject to fishing (`a` and `b`) and one refuge area not subject to fishing (`c`). All three areas belong to the same stock (`sr` and `stk0` from Part 1).
 
-```{r om-setup}
-stka <- stkb <- stkc <- stk
-sra.gm <- srb.gm <- src.gm <- as.FLSR(stka, model = "geomean")
-harvest(stka) <- harvest(stkb) <- harvest(stk) * 0.5
-harvest(stkc)[] <- 0
+Each scenario below varies the movement rates between areas via `args_om`. The OM setup is based on the following parameters:
 
-yinit <- 50
+- `smpf` — seamount partial f
+- `bab` — movement rate from area a to area b
+- `bba` — movement rate from area b to area a
+- `bac` — movement rate from area a to area c
+- `bbc` — movement rate from area b to area c
+- `smpra` — seamount a partial R
+- `smprb` — seamount b partial R
+- `ftrga` — seamount a f target
+- `ftrgb` — seamount b f target
+
+Partial recruitment to area c is computed by $1-smpra-smprb$.
+
+There are three scenarios:
+
+1. **Minimum movement**, with the same recruitment across areas. Areas a and b show the same behaviour. Biomass in area c is higher, since recruitment is the same across areas but area c is not fished.
+2. **Strong vertical migration**, with the same recruitment across areas. Areas a and b become depleted, with very low biomass and catches reduced to very small amounts. Biomass in area c is very high, since most of the population moves there and it is not fished.
+3. **Strong horizontal movement**. Area a (donor) becomes depleted, with very low catches. In this case even recruitment is reduced, since horizontal migration includes recruitment and occurs after the settlement process. Area b (receiver) is in a healthy state, including high recruitment inherited from area a. Area c behaves as in scenario 01.
+
+## Scenario 01: minimum movement (by age and time)
+
+```{r args-s01}
+args_om <- list(
+  smpf = 0.5,     # seamount partial f
+  bab = 0.05,     # from a to b
+  bba = 0.05,     # from b to a
+  bac = 0,        # from a to c
+  bbc = 0,        # from b to c
+  smpra = 0.333,  # seamount a partial R
+  smprb = 0.333,  # seamount b partial R
+  ftrga = 0.05,   # seamount a f target
+  ftrgb = 0.05    # seamount b f target
+)
 ```
 
-## Scenario 1: minimum movement (by age and time)
+```{r objects-s01}
+# objects
+stka_s01 <- stkb_s01 <- stkc_s01 <- stk_s01 <- stk0
+sra.gm <- srb.gm <- src.gm <- as.FLSR(stk_s01, model = "geomean")
+harvest(stka_s01) <- harvest(stk_s01) * args_om$smpf
+harvest(stkb_s01) <- harvest(stk_s01) * (1 - args_om$smpf)
+harvest(stkc_s01)[] <- 0
+```
 
-```{r movement-minimum}
-flq0 <- stock.n(stk)
-flq0[] <- range(stk)["min"]:range(stk)["max"]
-
+```{r movement-s01}
+flq0 <- stock.n(stk_s01)
+flq0[] <- range(stk_s01)["min"]:range(stk_s01)["max"]
 # from a to b
 bab <- flq0
-bab[] <- 0.05
+bab[] <- args_om$bab
 # from b to a
 bba <- flq0
-bba[] <- 0.05
+bba[] <- args_om$bba
 # from a to c
-bac <- 0.05
-bac <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * bac
+bac <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * args_om$bac
 # from b to c
-bbc <- 0.05
-bbc <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * bbc
-
+bbc <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * args_om$bbc
 mov <- FLQuants(bab = bab, bba = bba, bac = bac, bbc = bbc)
 ```
 
-```{r projection-minimum}
-for (i in 1:50) {
+```{r projection-s01}
+for (i in 50:100) {
   # common recruitment
-  rfut <- predict(sr, ssb = ssb(stk)[, ac(yinit + i - 1)])
+  rfut <- predict(sr, ssb = ssb(stk_s01)[, ac(i - 1)])
 
   # movement
   # from a to b
-  stknab <- stock.n(stka)[, ac(yinit + i)] * mov[["bab"]][, ac(yinit + i)]
+  stknab <- stock.n(stka_s01)[, ac(i)] * mov[["bab"]][, ac(i)]
   # from b to a
-  stknba <- stock.n(stkb)[, ac(yinit + i)] * mov[["bba"]][, ac(yinit + i)]
+  stknba <- stock.n(stkb_s01)[, ac(i)] * mov[["bba"]][, ac(i)]
   # from a to c
-  stknac <- stock.n(stka)[, ac(yinit + i)] * mov[["bac"]][, ac(yinit + i)]
+  stknac <- stock.n(stka_s01)[, ac(i)] * mov[["bac"]][, ac(i)]
   # from b to c
-  stknbc <- stock.n(stkb)[, ac(yinit + i)] * mov[["bbc"]][, ac(yinit + i)]
+  stknbc <- stock.n(stkb_s01)[, ac(i)] * mov[["bbc"]][, ac(i)]
 
-  stock.n(stka)[, ac(yinit + i)] <- stock.n(stka)[, ac(yinit + i)] - stknab - stknac + stknba
-  stock.n(stkb)[, ac(yinit + i)] <- stock.n(stkb)[, ac(yinit + i)] - stknba - stknbc + stknab
-  stock.n(stkc)[, ac(yinit + i)] <- stock.n(stkc)[, ac(yinit + i)] + stknac + stknbc
+  stock.n(stka_s01)[, ac(i)] <- stock.n(stka_s01)[, ac(i)] - stknab - stknac + stknba
+  stock.n(stkb_s01)[, ac(i)] <- stock.n(stkb_s01)[, ac(i)] - stknba - stknbc + stknab
+  stock.n(stkc_s01)[, ac(i)] <- stock.n(stkc_s01)[, ac(i)] + stknac + stknbc
 
   # distribute recruitment evenly
-  params(sra.gm)[] <- rfut * 0.33
-  params(srb.gm)[] <- rfut * 0.33
-  params(src.gm)[] <- rfut * 0.33
+  params(sra.gm)[] <- rfut * args_om$smpra
+  params(srb.gm)[] <- rfut * args_om$smprb
+  params(src.gm)[] <- rfut * (1 - args_om$smpra - args_om$smprb)
 
-  # set projection at F level of 0.05 in the seamounts, area c has
+  # set projection at F level of ftrg in the seamounts, area c has
   # harvest = 0, so no F will happen
-  ctrl <- fwdControl(year = c(yinit + i, yinit + i + 1), quant = "f", value = 0.05)
-  stka <- fwd(stka, control = ctrl, sr = sra.gm)
-  stkb <- fwd(stkb, control = ctrl, sr = srb.gm)
-  stkc <- fwd(stkc, control = ctrl, sr = src.gm)
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = args_om$ftrga)
+  stka_s01 <- fwd(stka_s01, control = ctrl, sr = sra.gm)
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = args_om$ftrgb)
+  stkb_s01 <- fwd(stkb_s01, control = ctrl, sr = srb.gm)
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = 0)
+  stkc_s01 <- fwd(stkc_s01, control = ctrl, sr = src.gm)
 
   # update stock
-  stk <- stka + stkb + stkc
+  stk_s01 <- stka_s01 + stkb_s01 + stkc_s01
 }
 ```
 
-```{r plot-minimum}
-plot(window(FLStocks(a = stka, b = stkb, c = stkc), 51))
-plot(window(stk, 51))
+```{r plot-s01}
+plot(window(FLStocks(a = stka_s01, b = stkb_s01, c = stkc_s01), 51, 100))
+plot(window(stk_s01, 51, 100))
 ```
 
-## Scenario 2: strong vertical migration (by age and time)
+## Scenario 02: strong vertical migration (by age and time)
 
-```{r movement-strong}
-flq0 <- stock.n(stk)
-flq0[] <- range(stk)["min"]:range(stk)["max"]
+```{r args-s02}
+args_om <- list(
+  smpf = 0.5,     # seamount partial f
+  bab = 0.05,     # from a to b
+  bba = 0.05,     # from b to a
+  bac = 1,        # from a to c
+  bbc = 1,        # from b to c
+  smpra = 0.333,  # seamount a partial R
+  smprb = 0.333,  # seamount b partial R
+  ftrga = 0.05,   # seamount a f target
+  ftrgb = 0.05    # seamount b f target
+)
+```
 
+```{r objects-s02}
+# objects
+stka_s02 <- stkb_s02 <- stkc_s02 <- stk_s02 <- stk0
+sra.gm <- srb.gm <- src.gm <- as.FLSR(stk_s02, model = "geomean")
+harvest(stka_s02) <- harvest(stk_s02) * args_om$smpf
+harvest(stkb_s02) <- harvest(stk_s02) * (1 - args_om$smpf)
+harvest(stkc_s02)[] <- 0
+```
+
+```{r movement-s02}
+flq0 <- stock.n(stk_s02)
+flq0[] <- range(stk_s02)["min"]:range(stk_s02)["max"]
 # from a to b
 bab <- flq0
-bab[] <- 0.05
+bab[] <- args_om$bab
 # from b to a
 bba <- flq0
-bba[] <- 0.05
+bba[] <- args_om$bba
 # from a to c
-bac <- 0.5
-bac <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * bac
+bac <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * args_om$bac
 # from b to c
-bbc <- 0.5
-bbc <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * bbc
-
+bbc <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * args_om$bbc
 mov <- FLQuants(bab = bab, bba = bba, bac = bac, bbc = bbc)
 ```
 
-```{r projection-strong}
-for (i in 1:50) {
+```{r projection-s02}
+for (i in 50:100) {
   # common recruitment
-  rfut <- predict(sr, ssb = ssb(stk)[, ac(yinit + i - 1)])
+  rfut <- predict(sr, ssb = ssb(stk_s02)[, ac(i - 1)])
 
   # movement
   # from a to b
-  stknab <- stock.n(stka)[, ac(yinit + i)] * mov[["bab"]][, ac(yinit + i)]
+  stknab <- stock.n(stka_s02)[, ac(i)] * mov[["bab"]][, ac(i)]
   # from b to a
-  stknba <- stock.n(stkb)[, ac(yinit + i)] * mov[["bba"]][, ac(yinit + i)]
+  stknba <- stock.n(stkb_s02)[, ac(i)] * mov[["bba"]][, ac(i)]
   # from a to c
-  stknac <- stock.n(stka)[, ac(yinit + i)] * mov[["bac"]][, ac(yinit + i)]
+  stknac <- stock.n(stka_s02)[, ac(i)] * mov[["bac"]][, ac(i)]
   # from b to c
-  stknbc <- stock.n(stkb)[, ac(yinit + i)] * mov[["bbc"]][, ac(yinit + i)]
+  stknbc <- stock.n(stkb_s02)[, ac(i)] * mov[["bbc"]][, ac(i)]
 
-  stock.n(stka)[, ac(yinit + i)] <- stock.n(stka)[, ac(yinit + i)] - stknab - stknac + stknba
-  stock.n(stkb)[, ac(yinit + i)] <- stock.n(stkb)[, ac(yinit + i)] - stknba - stknbc + stknab
-  stock.n(stkc)[, ac(yinit + i)] <- stock.n(stkc)[, ac(yinit + i)] + stknac + stknbc
+  stock.n(stka_s02)[, ac(i)] <- stock.n(stka_s02)[, ac(i)] - stknab - stknac + stknba
+  stock.n(stkb_s02)[, ac(i)] <- stock.n(stkb_s02)[, ac(i)] - stknba - stknbc + stknab
+  stock.n(stkc_s02)[, ac(i)] <- stock.n(stkc_s02)[, ac(i)] + stknac + stknbc
 
   # distribute recruitment evenly
-  params(sra.gm)[] <- rfut * 0.33
-  params(srb.gm)[] <- rfut * 0.33
-  params(src.gm)[] <- rfut * 0.33
+  params(sra.gm)[] <- rfut * args_om$smpra
+  params(srb.gm)[] <- rfut * args_om$smprb
+  params(src.gm)[] <- rfut * (1 - args_om$smpra - args_om$smprb)
 
-  # set projection at F level of 0.05 in the seamounts, area c has
+  # set projection at F level of ftrg in the seamounts, area c has
   # harvest = 0, so no F will happen
-  ctrl <- fwdControl(year = c(yinit + i, yinit + i + 1), quant = "f", value = 0.05)
-  stka <- fwd(stka, control = ctrl, sr = sra.gm)
-  stkb <- fwd(stkb, control = ctrl, sr = srb.gm)
-  stkc <- fwd(stkc, control = ctrl, sr = src.gm)
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = args_om$ftrga)
+  stka_s02 <- fwd(stka_s02, control = ctrl, sr = sra.gm)
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = args_om$ftrgb)
+  stkb_s02 <- fwd(stkb_s02, control = ctrl, sr = srb.gm)
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = 0)
+  stkc_s02 <- fwd(stkc_s02, control = ctrl, sr = src.gm)
 
   # update stock
-  stk <- stka + stkb + stkc
+  stk_s02 <- stka_s02 + stkb_s02 + stkc_s02
 }
 ```
 
-```{r plot-strong}
-plot(window(FLStocks(a = stka, b = stkb, c = stkc), 51))
-plot(window(stk, 51))
+```{r plot-s02}
+plot(window(FLStocks(a = stka_s02, b = stkb_s02, c = stkc_s02), 51, 100))
+plot(window(stk_s02, 51, 100))
+```
+
+## Scenario 03: strong horizontal migration (by age and time)
+
+```{r args-s03}
+args_om <- list(
+  smpf = 0.5,     # seamount partial f
+  bab = 0.75,     # from a to b
+  bba = 0.05,     # from b to a
+  bac = 0,        # from a to c
+  bbc = 0,        # from b to c
+  smpra = 0.333,  # seamount a partial R
+  smprb = 0.333,  # seamount b partial R
+  ftrga = 0.05,   # seamount a f target
+  ftrgb = 0.05    # seamount b f target
+)
+```
+
+```{r objects-s03}
+# objects
+stka_s03 <- stkb_s03 <- stkc_s03 <- stk_s03 <- stk0
+sra.gm <- srb.gm <- src.gm <- as.FLSR(stk_s03, model = "geomean")
+harvest(stka_s03) <- harvest(stk_s03) * args_om$smpf
+harvest(stkb_s03) <- harvest(stk_s03) * (1 - args_om$smpf)
+harvest(stkc_s03)[] <- 0
+```
+
+```{r movement-s03}
+flq0 <- stock.n(stk_s03)
+flq0[] <- range(stk_s03)["min"]:range(stk_s03)["max"]
+# from a to b
+bab <- flq0
+bab[] <- args_om$bab
+# from b to a
+bba <- flq0
+bba[] <- args_om$bba
+# from a to c
+bac <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * args_om$bac
+# from b to c
+bbc <- FLife:::logisticFn(age = flq0, params = FLPar(a50 = a50, asym = 1, ato95 = 1)) * args_om$bbc
+mov <- FLQuants(bab = bab, bba = bba, bac = bac, bbc = bbc)
+```
+
+```{r projection-s03}
+for (i in 50:100) {
+  # common recruitment
+  rfut <- predict(sr, ssb = ssb(stk_s03)[, ac(i - 1)])
+
+  # movement
+  # from a to b
+  stknab <- stock.n(stka_s03)[, ac(i)] * mov[["bab"]][, ac(i)]
+  # from b to a
+  stknba <- stock.n(stkb_s03)[, ac(i)] * mov[["bba"]][, ac(i)]
+  # from a to c
+  stknac <- stock.n(stka_s03)[, ac(i)] * mov[["bac"]][, ac(i)]
+  # from b to c
+  stknbc <- stock.n(stkb_s03)[, ac(i)] * mov[["bbc"]][, ac(i)]
+
+  stock.n(stka_s03)[, ac(i)] <- stock.n(stka_s03)[, ac(i)] - stknab - stknac + stknba
+  stock.n(stkb_s03)[, ac(i)] <- stock.n(stkb_s03)[, ac(i)] - stknba - stknbc + stknab
+  stock.n(stkc_s03)[, ac(i)] <- stock.n(stkc_s03)[, ac(i)] + stknac + stknbc
+
+  # distribute recruitment evenly
+  params(sra.gm)[] <- rfut * args_om$smpra
+  params(srb.gm)[] <- rfut * args_om$smprb
+  params(src.gm)[] <- rfut * (1 - args_om$smpra - args_om$smprb)
+
+  # set projection at F level of ftrg in the seamounts, area c has
+  # harvest = 0, so no F will happen
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = args_om$ftrga)
+  stka_s03 <- fwd(stka_s03, control = ctrl, sr = sra.gm)
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = args_om$ftrgb)
+  stkb_s03 <- fwd(stkb_s03, control = ctrl, sr = srb.gm)
+  ctrl <- fwdControl(year = c(i + 1), quant = "f", value = 0)
+  stkc_s03 <- fwd(stkc_s03, control = ctrl, sr = src.gm)
+
+  # update stock
+  stk_s03 <- stka_s03 + stkb_s03 + stkc_s03
+}
+```
+
+```{r plot-s03}
+plot(window(FLStocks(a = stka_s03, b = stkb_s03, c = stkc_s03), 51, 100))
+plot(window(stk_s03, 51, 100))
 ```
 
 # Session info
